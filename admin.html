@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KingGym — Administration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div id="logo-slot"></div>
+
+    <nav>
+      <div class="nav-group">
+        <button class="nav-item active" data-section="dashboard">Tableau de bord</button>
+        <button class="nav-item" data-section="schedules">Plannings</button>
+        <button class="nav-item" data-section="sports">Sports</button>
+        <button class="nav-item" data-section="members">Membres</button>
+        <button class="nav-item" data-section="guardians">Tuteurs</button>
+        <button class="nav-item" data-section="memberships">Inscriptions</button>
+        <button class="nav-item" data-section="payments">Paiements</button>
+        <button class="nav-item" data-section="coaches">Coachs</button>
+        <button class="nav-item" data-section="users">Utilisateurs</button>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="who">
+        <strong id="who-name">—</strong>
+        <span id="who-role">—</span>
+      </div>
+      <button class="btn btn-secondary" id="btn-logout" style="width:100%;">Déconnexion</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-header">
+      <h1 id="section-title">Tableau de bord</h1>
+      <span class="badge-role">Admin</span>
+    </div>
+
+    <div id="msg-slot"></div>
+
+    <!-- DASHBOARD -->
+    <section class="section active" id="sec-dashboard">
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="card">
+        <div class="card-header"><h3>Derniers paiements</h3></div>
+        <table><thead><tr><th>Date</th><th>Membre</th><th>Type</th><th>Montant</th><th>Statut</th></tr></thead>
+        <tbody id="dash-payments"></tbody></table>
+      </div>
+    </section>
+
+    <!-- SCHEDULES / PLANNINGS -->
+    <section class="section" id="sec-schedules">
+      <div class="card">
+        <div class="card-header">
+          <h3>Planning hebdomadaire</h3>
+          <button class="btn btn-primary btn-sm" id="btn-add-schedule">+ Nouveau créneau</button>
+        </div>
+        <div class="week-grid" id="week-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Tous les créneaux</h3></div>
+        <table><thead><tr><th>Nom</th><th>Sport</th><th>Jour</th><th>Horaire</th><th>Lieu</th><th>Âge</th><th>Capacité</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="tbl-schedules"></tbody></table>
+      </div>
+    </section>
+
+    <!-- SPORTS -->
+    <section class="section" id="sec-sports">
+      <div class="card">
+        <div class="card-header">
+          <h3>Sports proposés</h3>
+          <button class="btn btn-primary btn-sm" id="btn-add-sport">+ Nouveau sport</button>
+        </div>
+        <table><thead><tr><th>Nom</th><th>Description</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="tbl-sports"></tbody></table>
+      </div>
+    </section>
+
+    <!-- MEMBERS -->
+    <section class="section" id="sec-members">
+      <div class="card">
+        <div class="card-header">
+          <h3>Membres</h3>
+          <button class="btn btn-primary btn-sm" id="btn-add-member">+ Nouveau membre</button>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="search-members" placeholder="Rechercher un membre...">
+        </div>
+        <table><thead><tr><th>N°</th><th>Nom</th><th>Naissance</th><th>Genre</th><th>École</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="tbl-members"></tbody></table>
+      </div>
+    </section>
+
+    <!-- GUARDIANS -->
+    <section class="section" id="sec-guardians">
+      <div class="card">
+        <div class="card-header">
+          <h3>Tuteurs / Parents</h3>
+          <button class="btn btn-primary btn-sm" id="btn-add-guardian">+ Nouveau tuteur</button>
+        </div>
+        <table><thead><tr><th>Nom</th><th>Téléphone</th><th>E-mail</th><th></th></tr></thead>
+        <tbody id="tbl-guardians"></tbody></table>
+      </div>
+    </section>
+
+    <!-- MEMBERSHIPS / INSCRIPTIONS -->
+    <section class="section" id="sec-memberships">
+      <div class="card">
+        <div class="card-header">
+          <h3>Inscriptions</h3>
+          <button class="btn btn-primary btn-sm" id="btn-add-membership">+ Nouvelle inscription</button>
+        </div>
+        <table><thead><tr><th>Membre</th><th>Sport</th><th>Créneau</th><th>Début</th><th>Statut</th><th>Cotisation</th><th></th></tr></thead>
+        <tbody id="tbl-memberships"></tbody></table>
+      </div>
+    </section>
+
+    <!-- PAYMENTS -->
+    <section class="section" id="sec-payments">
+      <div class="card">
+        <div class="card-header">
+          <h3>Paiements</h3>
+          <button class="btn btn-primary btn-sm" id="btn-add-payment">+ Nouveau paiement</button>
+        </div>
+        <table><thead><tr><th>Date</th><th>Membre</th><th>Type</th><th>Montant</th><th>Méthode</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="tbl-payments"></tbody></table>
+      </div>
+    </section>
+
+    <!-- COACHES -->
+    <section class="section" id="sec-coaches">
+      <div class="card">
+        <div class="card-header"><h3>Fiches coachs</h3></div>
+        <p class="hint" style="text-align:left;margin-top:-6px;">Un compte doit d'abord être activé avec le rôle "coach" dans l'onglet Utilisateurs avant de pouvoir créer sa fiche ici.</p>
+        <table><thead><tr><th>Nom</th><th>Spécialité</th><th>Embauche</th><th></th></tr></thead>
+        <tbody id="tbl-coaches"></tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Affectations aux créneaux</h3>
+          <button class="btn btn-primary btn-sm" id="btn-add-assignment">+ Nouvelle affectation</button>
+        </div>
+        <table><thead><tr><th>Coach</th><th>Créneau</th><th>Rôle</th><th>Depuis</th><th>Jusqu'à</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="tbl-assignments"></tbody></table>
+      </div>
+    </section>
+
+    <!-- USERS -->
+    <section class="section" id="sec-users">
+      <div class="card">
+        <div class="card-header"><h3>Comptes utilisateurs</h3></div>
+        <p class="hint" style="text-align:left;margin-top:-6px;">Activez les demandes d'accès coach et attribuez les rôles ici.</p>
+        <table><thead><tr><th>Nom</th><th>Téléphone</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="tbl-users"></tbody></table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Modal générique -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Titre</h3>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <form id="modal-form"></form>
+  </div>
+</div>
+
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>

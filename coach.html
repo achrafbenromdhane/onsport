@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KingGym — Espace Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div id="logo-slot"></div>
+    <nav>
+      <div class="nav-group">
+        <button class="nav-item active">Présences</button>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="who">
+        <strong id="who-name">—</strong>
+        <span>Coach</span>
+      </div>
+      <button class="btn btn-secondary" id="btn-logout" style="width:100%;">Déconnexion</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-header">
+      <h1>Feuille de présence</h1>
+      <span class="badge-role">Coach</span>
+    </div>
+
+    <div id="msg-slot"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Mes créneaux</h3>
+        <input type="date" id="att-date" class="btn-sm">
+      </div>
+      <div class="schedule-picker" id="schedule-picker"></div>
+    </div>
+
+    <div class="card" id="attendance-card" style="display:none;">
+      <div class="card-header">
+        <h3 id="attendance-title">Membres inscrits</h3>
+        <button class="btn btn-primary btn-sm" id="btn-save-attendance">Enregistrer la présence</button>
+      </div>
+      <div id="attendance-list"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="js/coach.js"></script>
+</body>
+</html>
