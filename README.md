@@ -83,11 +83,20 @@ regroupe tout sur un seul écran :
 Décocher un sport n'efface pas l'historique : l'inscription à ce sport passe
 au statut "cancelled" (les paiements/présences déjà enregistrés sont conservés).
 
-### Paiements en dinars (DA)
+### Paiements en dinars tunisiens (TND)
 
 Tous les montants (frais d'inscription, cotisations, paiements) sont exprimés
-en **dinars (DA)**. La méthode de paiement "Carte" a été retirée du formulaire ;
-seules les méthodes Espèces, Virement, En ligne et Chèque sont proposées.
+en **dinars tunisiens (TND)**. La méthode de paiement "Carte" a été retirée du
+formulaire ; seules les méthodes Espèces, Virement, En ligne et Chèque sont
+proposées. Le tableau de bord n'affiche plus de total de revenus.
+
+### Créer une fiche coach
+
+Dans l'onglet **Coachs**, le bouton **+ Nouvelle fiche coach** liste tous les
+comptes activés avec le rôle "coach" (ou "assistant_coach") qui n'ont pas
+encore de fiche : sélectionnez le compte, renseignez la spécialité et la date
+d'embauche. La fiche apparaît ensuite dans la liste et devient disponible dans
+le sélecteur "Coach" du formulaire **+ Nouvelle affectation**.
 
 ## 5. Structure du projet
 
