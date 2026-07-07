@@ -648,7 +648,8 @@ async function loadCoachesAndAssignments() {
   document.querySelectorAll('#tbl-coaches [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('coaches', 'coach_id', b.dataset.del, loadCoachesAndAssignments)));
 
   // Comptes actifs avec un rôle coach/assistant_coach qui n'ont pas encore de fiche coach.
-  const { data: users } = await supabase.from('app_users').select('*').in('role', ['coach', 'assistant_coach']).eq('is_active', true);
+  const { data: users, error: usersError } = await supabase.from('app_users').select('*').in('role', ['coach', 'assistant_coach']).eq('is_active', true);
+  if (usersError) console.error('Erreur chargement comptes coach éligibles :', usersError);
   const existingUserIds = new Set(COACHES_CACHE.map(c => c.user_id));
   ELIGIBLE_COACH_USERS_CACHE = (users || []).filter(u => !existingUserIds.has(u.user_id));
 
@@ -677,7 +678,7 @@ async function loadCoachesAndAssignments() {
 
 function openCoachForm() {
   if (ELIGIBLE_COACH_USERS_CACHE.length === 0) {
-    showMsg('Aucun compte disponible : activez d\'abord un compte avec le rôle "coach" dans l\'onglet Utilisateurs (il ne doit pas déjà avoir de fiche coach).', 'info');
+    showMsg('Aucun compte disponible pour créer une fiche. Vérifiez dans l\'onglet "Utilisateurs" qu\'un compte a bien le rôle "coach" ET le statut "Actif" (bouton "Activer") — et qu\'il n\'a pas déjà une fiche coach ici.', 'info');
     return;
   }
   const userOptions = ELIGIBLE_COACH_USERS_CACHE.map(u => `<option value="${u.user_id}">${esc(u.first_name)} ${esc(u.last_name)}</option>`).join('');
