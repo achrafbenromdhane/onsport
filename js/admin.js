@@ -32,7 +32,7 @@ async function init() {
   });
 
   document.getElementById('search-members').addEventListener('input', (e) => {
-    renderMembersTable(e.target.value.trim().toLowerCase());
+    renderInscriptionsTable(e.target.value.trim().toLowerCase());
   });
 
   await loadDashboard();
@@ -40,7 +40,7 @@ async function init() {
 
 const SECTION_TITLES = {
   dashboard: 'Tableau de bord', schedules: 'Plannings', sports: 'Sports',
-  members: 'Membres', guardians: 'Tuteurs / Parents', memberships: 'Inscriptions',
+  memberships: 'Inscriptions',
   payments: 'Paiements', coaches: 'Coachs', users: 'Comptes utilisateurs',
 };
 
@@ -58,7 +58,7 @@ async function switchSection(name, btn) {
     loadedSections.add(name);
     const loaders = {
       dashboard: loadDashboard, schedules: loadSchedules, sports: loadSports,
-      members: loadMembers, guardians: loadGuardians, memberships: loadMemberships,
+      memberships: loadMemberships,
       payments: loadPayments, coaches: loadCoachesAndAssignments, users: loadUsers,
     };
     await loaders[name]();
@@ -68,8 +68,6 @@ async function switchSection(name, btn) {
 function wireAddButtons() {
   document.getElementById('btn-add-sport').addEventListener('click', () => openSportForm());
   document.getElementById('btn-add-schedule').addEventListener('click', () => openScheduleForm());
-  document.getElementById('btn-add-member').addEventListener('click', () => openMemberForm());
-  document.getElementById('btn-add-guardian').addEventListener('click', () => openGuardianForm());
   document.getElementById('btn-add-membership').addEventListener('click', () => openMembershipForm());
   document.getElementById('btn-add-payment').addEventListener('click', () => openPaymentForm());
   document.getElementById('btn-add-assignment').addEventListener('click', () => openAssignmentForm());
@@ -104,6 +102,7 @@ function openModal(title, formHtml, onSubmit) {
       alert('Erreur : ' + (err.message || err));
     }
   };
+  return form;
 }
 function closeModal() {
   document.getElementById('modal-backdrop').classList.remove('open');
@@ -116,7 +115,7 @@ function esc(s) {
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; }
 function fmtTime(t) { return t ? t.slice(0, 5) : '—'; }
-function fmtMoney(n) { return n === null || n === undefined ? '—' : Number(n).toFixed(2) + ' €'; }
+function fmtMoney(n) { return n === null || n === undefined ? '—' : Number(n).toFixed(2) + ' DA'; }
 function pill(status) { return `<span class="pill pill-${status}">${esc(status)}</span>`; }
 
 // =====================================================================
@@ -143,7 +142,7 @@ async function loadDashboard() {
   document.getElementById('stat-grid').innerHTML = `
     <div class="stat-card"><div class="stat-label">Membres actifs</div><div class="stat-value">${activeMembers ?? 0}</div></div>
     <div class="stat-card"><div class="stat-label">Inscriptions actives</div><div class="stat-value">${activeMemberships ?? 0}</div></div>
-    <div class="stat-card"><div class="stat-label">Revenus du mois</div><div class="stat-value">${monthRevenue.toFixed(0)} €</div></div>
+    <div class="stat-card"><div class="stat-label">Revenus du mois</div><div class="stat-value">${monthRevenue.toFixed(0)} DA</div></div>
     <div class="stat-card"><div class="stat-label">Présences aujourd'hui</div><div class="stat-value">${todayAttendance ?? 0}</div></div>
   `;
 
@@ -291,192 +290,267 @@ function openScheduleForm(row = null) {
 }
 
 // =====================================================================
-// MEMBERS
+// INSCRIPTIONS (membre + parent/tuteur + sport(s) multi-sport)
+// Tout se passe dans un seul écran : plus de menu séparé "Membres" / "Tuteurs".
 // =====================================================================
 
-let MEMBERS_CACHE = [];
+let MEMBERS_CACHE = [];   // membres + tuteurs liés + inscriptions (memberships) imbriqués
+let GUARDIANS_CACHE = []; // liste des tuteurs existants, pour réutilisation dans le formulaire
 
-async function loadMembers() {
-  const { data, error } = await supabase.from('members').select('*').order('last_name');
-  if (error) { showMsg(error.message, 'error'); return; }
-  MEMBERS_CACHE = data || [];
-  renderMembersTable('');
+async function loadGuardiansCache() {
+  const { data } = await supabase.from('guardians').select('*').order('last_name');
+  GUARDIANS_CACHE = data || [];
 }
 
-function renderMembersTable(filter) {
-  const rows = MEMBERS_CACHE.filter(m => !filter || `${m.first_name} ${m.last_name} ${m.member_number}`.toLowerCase().includes(filter));
-  document.getElementById('tbl-members').innerHTML = rows.map(m => `
+async function loadMemberships() {
+  if (SPORTS_CACHE.length === 0) await loadSports();
+  if (SCHEDULES_CACHE.length === 0) await loadSchedules();
+  await loadGuardiansCache();
+
+  const { data, error } = await supabase
+    .from('members')
+    .select(`*,
+      member_guardians(relationship, is_primary_contact, guardians(*)),
+      memberships(*, sports(name), training_schedules(name))
+    `)
+    .order('created_at', { ascending: false });
+  if (error) { showMsg(error.message, 'error'); return; }
+  MEMBERS_CACHE = data || [];
+  renderInscriptionsTable('');
+}
+
+function primaryGuardianOf(member) {
+  const links = member.member_guardians || [];
+  const primary = links.find(l => l.is_primary_contact) || links[0];
+  return primary ? primary.guardians : null;
+}
+
+function renderInscriptionsTable(filter) {
+  const rows = MEMBERS_CACHE.filter(m => {
+    if (!filter) return true;
+    const g = primaryGuardianOf(m);
+    const haystack = `${m.first_name} ${m.last_name} ${m.member_number} ${g?.first_name || ''} ${g?.last_name || ''} ${g?.phone || ''}`.toLowerCase();
+    return haystack.includes(filter);
+  });
+
+  document.getElementById('tbl-memberships').innerHTML = rows.map(m => {
+    const guardian = primaryGuardianOf(m);
+    const activeSports = (m.memberships || []).filter(ms => ms.membership_status !== 'cancelled');
+    const sportsLabel = activeSports.length
+      ? activeSports.map(ms => esc(ms.sports?.name || '—')).join(', ')
+      : '<span class="empty-state" style="padding:0;color:var(--muted);">Aucun sport</span>';
+    return `
     <tr>
       <td>${esc(m.member_number)}</td>
       <td>${esc(m.first_name)} ${esc(m.last_name)}</td>
       <td>${fmtDate(m.birth_date)}</td>
-      <td>${esc(m.gender)}</td>
-      <td>${esc(m.school_name || '—')}</td>
+      <td>${guardian ? esc(guardian.first_name) + ' ' + esc(guardian.last_name) : '—'}</td>
+      <td>${guardian ? esc(guardian.phone) : '—'}</td>
+      <td>${sportsLabel}</td>
       <td>${pill(m.status)}</td>
       <td>
         <button class="btn btn-secondary btn-sm" data-edit="${m.member_id}">Modifier</button>
         <button class="btn btn-danger btn-sm" data-del="${m.member_id}">Suppr.</button>
       </td>
-    </tr>`).join('') || `<tr><td colspan="7" class="empty-state">Aucun membre.</td></tr>`;
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" class="empty-state">Aucune inscription. Cliquez sur "+ Nouvelle inscription" pour commencer.</td></tr>`;
 
-  document.querySelectorAll('#tbl-members [data-edit]').forEach(b => b.addEventListener('click', () => openMemberForm(MEMBERS_CACHE.find(m => m.member_id === b.dataset.edit))));
-  document.querySelectorAll('#tbl-members [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('members', 'member_id', b.dataset.del, loadMembers)));
+  document.querySelectorAll('#tbl-memberships [data-edit]').forEach(b => b.addEventListener('click', () => openMembershipForm(MEMBERS_CACHE.find(m => m.member_id === b.dataset.edit))));
+  document.querySelectorAll('#tbl-memberships [data-del]').forEach(b => b.addEventListener('click', () => deleteMember(b.dataset.del)));
 }
 
-function openMemberForm(row = null) {
-  openModal(row ? 'Modifier le membre' : 'Nouveau membre', `
-    <div class="field"><label>N° membre</label><input name="member_number" required value="${esc(row?.member_number)}"></div>
-    <div class="field-row">
-      <div class="field"><label>Prénom</label><input name="first_name" required value="${esc(row?.first_name)}"></div>
-      <div class="field"><label>Nom</label><input name="last_name" required value="${esc(row?.last_name)}"></div>
-    </div>
-    <div class="field-row">
-      <div class="field"><label>Date de naissance</label><input type="date" name="birth_date" required value="${row?.birth_date || ''}"></div>
-      <div class="field"><label>Genre</label>
-        <select name="gender" required>
-          <option value="male" ${row?.gender === 'male' ? 'selected' : ''}>Masculin</option>
-          <option value="female" ${row?.gender === 'female' ? 'selected' : ''}>Féminin</option>
-          <option value="other" ${row?.gender === 'other' ? 'selected' : ''}>Autre</option>
-        </select>
-      </div>
-    </div>
-    <div class="field"><label>École</label><input name="school_name" value="${esc(row?.school_name)}"></div>
-    <div class="field"><label>Adresse</label><textarea name="address" rows="2">${esc(row?.address)}</textarea></div>
-    <div class="field"><label>Notes médicales</label><textarea name="medical_notes" rows="2">${esc(row?.medical_notes)}</textarea></div>
-    <div class="field"><label>Statut</label>
-      <select name="status">
-        <option value="active" ${row?.status === 'active' ? 'selected' : ''}>Actif</option>
-        <option value="inactive" ${row?.status === 'inactive' ? 'selected' : ''}>Inactif</option>
-        <option value="suspended" ${row?.status === 'suspended' ? 'selected' : ''}>Suspendu</option>
-        <option value="archived" ${row?.status === 'archived' ? 'selected' : ''}>Archivé</option>
-      </select>
-    </div>
-  `, async (fd) => {
-    const payload = {
-      member_number: fd.get('member_number'), first_name: fd.get('first_name'), last_name: fd.get('last_name'),
-      birth_date: fd.get('birth_date'), gender: fd.get('gender'), school_name: fd.get('school_name') || null,
-      address: fd.get('address') || null, medical_notes: fd.get('medical_notes') || null,
-      status: fd.get('status') || 'active',
-    };
-    const q = row ? supabase.from('members').update(payload).eq('member_id', row.member_id) : supabase.from('members').insert(payload);
-    const { error } = await q;
-    if (error) throw error;
-    await loadMembers();
-  });
+async function deleteMember(memberId) {
+  if (!confirm("Confirmer la suppression de ce membre et de son inscription ? Cette action est définitive.")) return;
+  // On retire d'abord le lien avec le(s) tuteur(s), puis le membre lui-même.
+  // Si des paiements/présences existent encore sur ses inscriptions, la suppression
+  // du membre échouera (contrainte de clé étrangère) : il faut alors d'abord
+  // annuler/supprimer ses inscriptions dans le détail.
+  await supabase.from('member_guardians').delete().eq('member_id', memberId);
+  const { error } = await supabase.from('members').delete().eq('member_id', memberId);
+  if (error) {
+    alert("Suppression impossible : " + error.message + "\n(des paiements ou présences existent probablement encore sur ses inscriptions ; annulez d'abord ses sports ci-dessous puis réessayez)");
+    return;
+  }
+  await loadMemberships();
 }
 
-// =====================================================================
-// GUARDIANS
-// =====================================================================
-
-let GUARDIANS_CACHE = [];
-
-async function loadGuardians() {
-  const { data, error } = await supabase.from('guardians').select('*').order('last_name');
-  if (error) { showMsg(error.message, 'error'); return; }
-  GUARDIANS_CACHE = data || [];
-  document.getElementById('tbl-guardians').innerHTML = GUARDIANS_CACHE.map(g => `
-    <tr>
-      <td>${esc(g.first_name)} ${esc(g.last_name)}</td>
-      <td>${esc(g.phone)}</td>
-      <td>${esc(g.email || '—')}</td>
-      <td>
-        <button class="btn btn-secondary btn-sm" data-edit="${g.guardian_id}">Modifier</button>
-        <button class="btn btn-danger btn-sm" data-del="${g.guardian_id}">Suppr.</button>
-      </td>
-    </tr>`).join('') || `<tr><td colspan="4" class="empty-state">Aucun tuteur.</td></tr>`;
-
-  document.querySelectorAll('#tbl-guardians [data-edit]').forEach(b => b.addEventListener('click', () => openGuardianForm(GUARDIANS_CACHE.find(g => g.guardian_id === b.dataset.edit))));
-  document.querySelectorAll('#tbl-guardians [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('guardians', 'guardian_id', b.dataset.del, loadGuardians)));
-}
-
-function openGuardianForm(row = null) {
-  openModal(row ? 'Modifier le tuteur' : 'Nouveau tuteur', `
-    <div class="field-row">
-      <div class="field"><label>Prénom</label><input name="first_name" required value="${esc(row?.first_name)}"></div>
-      <div class="field"><label>Nom</label><input name="last_name" required value="${esc(row?.last_name)}"></div>
-    </div>
-    <div class="field"><label>Téléphone</label><input name="phone" required value="${esc(row?.phone)}"></div>
-    <div class="field"><label>E-mail</label><input type="email" name="email" value="${esc(row?.email)}"></div>
-    <div class="field"><label>Adresse</label><textarea name="address" rows="2">${esc(row?.address)}</textarea></div>
-  `, async (fd) => {
-    const payload = { first_name: fd.get('first_name'), last_name: fd.get('last_name'), phone: fd.get('phone'), email: fd.get('email') || null, address: fd.get('address') || null };
-    const q = row ? supabase.from('guardians').update(payload).eq('guardian_id', row.guardian_id) : supabase.from('guardians').insert(payload);
-    const { error } = await q;
-    if (error) throw error;
-    await loadGuardians();
-  });
-}
-
-// =====================================================================
-// MEMBERSHIPS / INSCRIPTIONS
-// =====================================================================
-
-async function loadMemberships() {
-  if (MEMBERS_CACHE.length === 0) await loadMembers();
-  if (SPORTS_CACHE.length === 0) await loadSports();
-  if (SCHEDULES_CACHE.length === 0) await loadSchedules();
-
-  const { data, error } = await supabase.from('memberships')
-    .select('*, members(first_name,last_name), sports(name), training_schedules(name)')
-    .order('start_date', { ascending: false });
-  if (error) { showMsg(error.message, 'error'); return; }
-
-  document.getElementById('tbl-memberships').innerHTML = (data || []).map(m => `
-    <tr>
-      <td>${esc(m.members?.first_name)} ${esc(m.members?.last_name)}</td>
-      <td>${esc(m.sports?.name)}</td>
-      <td>${esc(m.training_schedules?.name || '—')}</td>
-      <td>${fmtDate(m.start_date)}</td>
-      <td>${pill(m.membership_status)}</td>
-      <td>${fmtMoney(m.monthly_fee)}</td>
-      <td>
-        <button class="btn btn-secondary btn-sm" data-edit="${m.membership_id}">Modifier</button>
-        <button class="btn btn-danger btn-sm" data-del="${m.membership_id}">Suppr.</button>
-      </td>
-    </tr>`).join('') || `<tr><td colspan="7" class="empty-state">Aucune inscription.</td></tr>`;
-
-  document.querySelectorAll('#tbl-memberships [data-edit]').forEach(b => b.addEventListener('click', async () => {
-    const row = data.find(m => m.membership_id === b.dataset.edit);
-    openMembershipForm(row);
-  }));
-  document.querySelectorAll('#tbl-memberships [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('memberships', 'membership_id', b.dataset.del, loadMemberships)));
+function generateMemberNumber() {
+  return 'M' + Date.now().toString().slice(-8);
 }
 
 function openMembershipForm(row = null) {
-  const memberOptions = MEMBERS_CACHE.map(m => `<option value="${m.member_id}" ${row?.member_id === m.member_id ? 'selected' : ''}>${esc(m.first_name)} ${esc(m.last_name)}</option>`).join('');
-  const sportOptions = SPORTS_CACHE.map(s => `<option value="${s.sport_id}" ${row?.sport_id === s.sport_id ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
-  const scheduleOptions = `<option value="">—</option>` + SCHEDULES_CACHE.map(s => `<option value="${s.schedule_id}" ${row?.schedule_id === s.schedule_id ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+  const guardian = row ? primaryGuardianOf(row) : null;
 
-  openModal(row ? "Modifier l'inscription" : 'Nouvelle inscription', `
-    <div class="field"><label>Membre</label><select name="member_id" required>${memberOptions}</select></div>
-    <div class="field"><label>Sport</label><select name="sport_id" required>${sportOptions}</select></div>
-    <div class="field"><label>Créneau</label><select name="schedule_id">${scheduleOptions}</select></div>
-    <div class="field-row">
-      <div class="field"><label>Date de début</label><input type="date" name="start_date" required value="${row?.start_date || new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>Date de fin</label><input type="date" name="end_date" value="${row?.end_date || ''}"></div>
+  const guardianOptions = `<option value="__new__">— Nouveau parent / tuteur —</option>` +
+    GUARDIANS_CACHE.map(g => `<option value="${g.guardian_id}" ${guardian?.guardian_id === g.guardian_id ? 'selected' : ''}>${esc(g.first_name)} ${esc(g.last_name)} — ${esc(g.phone)}</option>`).join('');
+
+  const sportsHtml = SPORTS_CACHE.filter(s => s.is_active !== false || (row && (row.memberships || []).some(ms => ms.sport_id === s.sport_id))).map(sport => {
+    const existing = row ? (row.memberships || []).find(ms => ms.sport_id === sport.sport_id) : null;
+    const checked = existing && existing.membership_status !== 'cancelled';
+    const scheduleOpts = `<option value="">—</option>` + SCHEDULES_CACHE
+      .filter(sc => sc.sport_id === sport.sport_id)
+      .map(sc => `<option value="${sc.schedule_id}" ${existing?.schedule_id === sc.schedule_id ? 'selected' : ''}>${esc(sc.name)} (${DAYS[sc.day_of_week]} ${fmtTime(sc.start_time)})</option>`).join('');
+    return `
+      <div class="sport-pick ${checked ? 'checked' : ''}" data-sport="${sport.sport_id}">
+        <label class="sport-pick-head">
+          <input type="checkbox" name="sport_${sport.sport_id}_on" ${checked ? 'checked' : ''}>
+          ${esc(sport.name)}
+        </label>
+        <div class="sport-pick-body">
+          <div class="field"><label>Créneau (optionnel)</label><select name="sport_${sport.sport_id}_schedule">${scheduleOpts}</select></div>
+          <div class="field-row">
+            <div class="field"><label>Frais d'inscription (DA)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_reg" value="${existing?.registration_fee ?? 0}"></div>
+            <div class="field"><label>Cotisation mensuelle (DA)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_monthly" value="${existing?.monthly_fee ?? 0}"></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('') || `<p class="hint" style="text-align:left;">Aucun sport actif. Créez d'abord un sport dans l'onglet "Sports".</p>`;
+
+  const form = openModal(row ? "Modifier l'inscription" : 'Nouvelle inscription', `
+    <div class="field-group">
+      <div class="field-group-title">Membre</div>
+      <div class="field"><label>N° membre</label><input name="member_number" required value="${esc(row?.member_number) || generateMemberNumber()}"></div>
+      <div class="field-row">
+        <div class="field"><label>Prénom</label><input name="first_name" required value="${esc(row?.first_name)}"></div>
+        <div class="field"><label>Nom</label><input name="last_name" required value="${esc(row?.last_name)}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date de naissance</label><input type="date" name="birth_date" required value="${row?.birth_date || ''}"></div>
+        <div class="field"><label>Genre</label>
+          <select name="gender" required>
+            <option value="male" ${row?.gender === 'male' ? 'selected' : ''}>Masculin</option>
+            <option value="female" ${row?.gender === 'female' ? 'selected' : ''}>Féminin</option>
+            <option value="other" ${row?.gender === 'other' ? 'selected' : ''}>Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>École</label><input name="school_name" value="${esc(row?.school_name)}"></div>
+      <div class="field"><label>Adresse</label><textarea name="address" rows="2">${esc(row?.address)}</textarea></div>
+      <div class="field"><label>Notes médicales</label><textarea name="medical_notes" rows="2">${esc(row?.medical_notes)}</textarea></div>
     </div>
-    <div class="field-row">
-      <div class="field"><label>Frais d'inscription (€)</label><input type="number" step="0.01" name="registration_fee" value="${row?.registration_fee ?? 0}"></div>
-      <div class="field"><label>Cotisation mensuelle (€)</label><input type="number" step="0.01" name="monthly_fee" value="${row?.monthly_fee ?? 0}"></div>
+
+    <div class="field-group">
+      <div class="field-group-title">Parent / Tuteur (obligatoire)</div>
+      <div class="field"><label>Tuteur existant</label><select id="guardian-select" name="guardian_id">${guardianOptions}</select></div>
+      <div id="new-guardian-fields">
+        <div class="field-row">
+          <div class="field"><label>Prénom du parent</label><input name="g_first_name" value="${esc(guardian?.first_name)}"></div>
+          <div class="field"><label>Nom du parent</label><input name="g_last_name" value="${esc(guardian?.last_name)}"></div>
+        </div>
+        <div class="field"><label>Téléphone</label><input type="tel" name="g_phone" value="${esc(guardian?.phone)}"></div>
+        <div class="field"><label>E-mail (optionnel)</label><input type="email" name="g_email" value="${esc(guardian?.email)}"></div>
+        <div class="field"><label>Adresse (optionnel)</label><textarea name="g_address" rows="2">${esc(guardian?.address)}</textarea></div>
+      </div>
     </div>
-    <div class="field"><label>Statut</label>
-      <select name="membership_status">
-        ${['pending','active','inactive','cancelled','expired'].map(s => `<option value="${s}" ${row?.membership_status === s ? 'selected' : ''}>${s}</option>`).join('')}
-      </select>
+
+    <div class="field-group">
+      <div class="field-group-title">Sport(s) — sélection multiple possible</div>
+      <div class="field"><label>Date d'affiliation</label><input type="date" name="affiliation_date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="sport-pick-list">${sportsHtml}</div>
     </div>
-    <div class="field"><label>Notes</label><textarea name="notes" rows="2">${esc(row?.notes)}</textarea></div>
   `, async (fd) => {
-    const payload = {
-      member_id: fd.get('member_id'), sport_id: fd.get('sport_id'), schedule_id: fd.get('schedule_id') || null,
-      start_date: fd.get('start_date'), end_date: fd.get('end_date') || null,
-      registration_fee: Number(fd.get('registration_fee') || 0), monthly_fee: Number(fd.get('monthly_fee') || 0),
-      membership_status: fd.get('membership_status'), notes: fd.get('notes') || null,
+    // --- 1. Tuteur / parent ---
+    const guardianId = fd.get('guardian_id');
+    let finalGuardianId = guardianId;
+    if (guardianId === '__new__') {
+      const gFirst = fd.get('g_first_name')?.trim();
+      const gLast = fd.get('g_last_name')?.trim();
+      const gPhone = fd.get('g_phone')?.trim();
+      if (!gFirst || !gLast || !gPhone) {
+        throw new Error("Les prénom, nom et téléphone du parent / tuteur sont obligatoires.");
+      }
+      const { data: newGuardian, error: gErr } = await supabase.from('guardians').insert({
+        first_name: gFirst, last_name: gLast, phone: gPhone,
+        email: fd.get('g_email') || null, address: fd.get('g_address') || null,
+      }).select().single();
+      if (gErr) throw gErr;
+      finalGuardianId = newGuardian.guardian_id;
+    } else {
+      // Tuteur existant sélectionné : on met à jour ses informations si modifiées.
+      const gFirst = fd.get('g_first_name')?.trim();
+      const gLast = fd.get('g_last_name')?.trim();
+      if (gFirst && gLast) {
+        await supabase.from('guardians').update({
+          first_name: gFirst, last_name: gLast,
+          phone: fd.get('g_phone') || undefined,
+          email: fd.get('g_email') || null, address: fd.get('g_address') || null,
+        }).eq('guardian_id', guardianId);
+      }
+    }
+
+    // --- 2. Membre ---
+    const memberPayload = {
+      member_number: fd.get('member_number'), first_name: fd.get('first_name'), last_name: fd.get('last_name'),
+      birth_date: fd.get('birth_date'), gender: fd.get('gender'), school_name: fd.get('school_name') || null,
+      address: fd.get('address') || null, medical_notes: fd.get('medical_notes') || null,
+      status: row?.status || 'active',
     };
-    const q = row ? supabase.from('memberships').update(payload).eq('membership_id', row.membership_id) : supabase.from('memberships').insert(payload);
-    const { error } = await q;
-    if (error) throw error;
+    let memberId = row?.member_id;
+    if (row) {
+      const { error: mErr } = await supabase.from('members').update(memberPayload).eq('member_id', memberId);
+      if (mErr) throw mErr;
+    } else {
+      const { data: newMember, error: mErr } = await supabase.from('members').insert(memberPayload).select().single();
+      if (mErr) throw mErr;
+      memberId = newMember.member_id;
+    }
+
+    // --- 3. Lien membre <-> tuteur (contact principal) ---
+    const { error: linkErr } = await supabase.from('member_guardians').upsert({
+      member_id: memberId, guardian_id: finalGuardianId, relationship: 'parent',
+      is_primary_contact: true, can_pick_up: true,
+    }, { onConflict: 'member_id,guardian_id' });
+    if (linkErr) throw linkErr;
+
+    // --- 4. Inscriptions sport (multi-sport) ---
+    const affiliation_date = fd.get('affiliation_date') || new Date().toISOString().slice(0, 10);
+    for (const sport of SPORTS_CACHE) {
+      const isChecked = fd.get(`sport_${sport.sport_id}_on`) === 'on';
+      const existing = row ? (row.memberships || []).find(ms => ms.sport_id === sport.sport_id) : null;
+      const scheduleId = fd.get(`sport_${sport.sport_id}_schedule`) || null;
+      const regFee = Number(fd.get(`sport_${sport.sport_id}_reg`) || 0);
+      const monthlyFee = Number(fd.get(`sport_${sport.sport_id}_monthly`) || 0);
+
+      if (isChecked) {
+        if (existing) {
+          const { error } = await supabase.from('memberships').update({
+            schedule_id: scheduleId, registration_fee: regFee, monthly_fee: monthlyFee,
+            membership_status: existing.membership_status === 'cancelled' ? 'active' : existing.membership_status,
+          }).eq('membership_id', existing.membership_id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('memberships').insert({
+            member_id: memberId, sport_id: sport.sport_id, schedule_id: scheduleId,
+            affiliation_date, start_date: affiliation_date,
+            registration_fee: regFee, monthly_fee: monthlyFee, membership_status: 'active',
+          });
+          if (error) throw error;
+        }
+      } else if (existing && existing.membership_status !== 'cancelled') {
+        // Sport décoché : on annule l'inscription plutôt que de la supprimer,
+        // pour conserver l'historique des paiements et présences déjà liés.
+        const { error } = await supabase.from('memberships').update({ membership_status: 'cancelled' }).eq('membership_id', existing.membership_id);
+        if (error) throw error;
+      }
+    }
+
     await loadMemberships();
+    showMsg("Inscription enregistrée.", 'success');
+  });
+
+  // Toggle affichage des champs "nouveau tuteur" selon la sélection.
+  const guardianSelect = form.querySelector('#guardian-select');
+  const newGuardianFields = form.querySelector('#new-guardian-fields');
+  function syncGuardianFields() {
+    newGuardianFields.style.display = guardianSelect.value === '__new__' ? 'block' : 'none';
+  }
+  guardianSelect.addEventListener('change', syncGuardianFields);
+  syncGuardianFields();
+
+  // Toggle affichage des détails sport (créneau/frais) selon la case cochée.
+  form.querySelectorAll('.sport-pick').forEach(box => {
+    const checkbox = box.querySelector('input[type="checkbox"]');
+    checkbox.addEventListener('change', () => box.classList.toggle('checked', checkbox.checked));
   });
 }
 
@@ -522,14 +596,13 @@ function openPaymentForm() {
         <option value="other">Autre</option>
       </select>
     </div>
-    <div class="field"><label>Montant (€)</label><input type="number" step="0.01" name="amount" required></div>
+    <div class="field"><label>Montant (DA)</label><input type="number" step="0.01" name="amount" required></div>
     <div class="field"><label>Date de paiement</label><input type="date" name="payment_date" value="${new Date().toISOString().slice(0,10)}"></div>
     <div class="field"><label>Mois concerné (le cas échéant)</label><input type="month" name="period_month"></div>
     <div class="field"><label>Méthode</label>
       <select name="payment_method">
         <option value="cash">Espèces</option>
         <option value="bank_transfer">Virement</option>
-        <option value="card">Carte</option>
         <option value="online">En ligne</option>
         <option value="cheque">Chèque</option>
       </select>
