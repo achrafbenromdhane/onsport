@@ -1,4 +1,4 @@
-# KingGym — Application de gestion de salle de sport
+# ON'SPORT — Application de gestion de salle de sport
 
 Application statique (HTML/CSS/JS, aucun build nécessaire) connectée à Supabase,
 hébergeable gratuitement sur GitHub Pages.
@@ -15,7 +15,7 @@ Dans l'éditeur SQL de votre projet Supabase, exécutez **dans cet ordre** :
 Puis créez votre premier compte administrateur :
 
 1. Supabase Dashboard → Authentication → Users → **Add user** (email + mot de passe),
-   ou laissez-vous vous inscrire depuis la page KingGym (onglet "Demande d'accès coach").
+   ou laissez-vous vous inscrire depuis la page ON'SPORT (onglet "Demande d'accès coach").
 2. Copiez l'UUID de ce compte.
 3. Dans l'éditeur SQL :
    ```sql
@@ -43,17 +43,17 @@ que les politiques RLS (étape 1) soient bien actives.
 ## 3. Déployer sur GitHub Pages
 
 ```bash
-# Depuis le dossier kinggym/
+# Depuis le dossier onsport/
 git init
 git add .
-git commit -m "KingGym - v1"
+git commit -m "ON'SPORT - v1"
 git branch -M main
-git remote add origin https://github.com/VOTRE-COMPTE/kinggym.git
+git remote add origin https://github.com/VOTRE-COMPTE/onsport.git
 git push -u origin main
 ```
 
 Puis sur GitHub : **Settings → Pages → Source: Deploy from branch → main / (root)**.
-Le site sera disponible à `https://VOTRE-COMPTE.github.io/kinggym/`.
+Le site sera disponible à `https://VOTRE-COMPTE.github.io/onsport/`.
 
 Aucune étape de build n'est nécessaire : les fichiers sont servis tels quels,
 et Supabase JS est chargé directement depuis un CDN (`esm.sh`) dans le navigateur.
@@ -67,30 +67,46 @@ et Supabase JS est chargé directement depuis un CDN (`esm.sh`) dans le navigate
 - Une fois activé, le coach doit avoir une **fiche coach** créée dans l'onglet
   **Coachs**, puis être **affecté à un ou plusieurs créneaux** — c'est cette
   affectation qui détermine ce qu'il voit dans son espace "Présences".
-- L'admin gère tout : sports, plannings, membres, tuteurs, inscriptions,
-  paiements, coachs. Le coach ne voit et ne modifie que les présences de ses
-  propres créneaux.
+- L'admin gère tout : sports, plannings, inscriptions, paiements, coachs.
+  Le coach ne voit et ne modifie que les présences de ses propres créneaux.
+
+### Inscriptions (écran unique)
+
+Il n'y a plus de menus séparés "Membres" et "Tuteurs" : l'onglet **Inscriptions**
+regroupe tout sur un seul écran :
+- les informations du membre (identité, naissance, école, notes médicales...),
+- les informations du parent / tuteur (obligatoires : prénom, nom, téléphone —
+  possibilité de réutiliser un tuteur déjà existant, par ex. pour un 2ᵉ enfant),
+- le(s) sport(s) choisis (un membre peut être inscrit à **plusieurs sports** en
+  même temps, chacun avec son créneau et ses frais propres).
+
+Décocher un sport n'efface pas l'historique : l'inscription à ce sport passe
+au statut "cancelled" (les paiements/présences déjà enregistrés sont conservés).
+
+### Paiements en dinars (DA)
+
+Tous les montants (frais d'inscription, cotisations, paiements) sont exprimés
+en **dinars (DA)**. La méthode de paiement "Carte" a été retirée du formulaire ;
+seules les méthodes Espèces, Virement, En ligne et Chèque sont proposées.
 
 ## 5. Structure du projet
 
 ```
-kinggym/
+onsport/
 ├── index.html              connexion / demande d'accès
 ├── admin.html               back-office (plannings, inscriptions, paiements...)
 ├── coach.html                espace coach (présences uniquement)
-├── css/styles.css            identité visuelle KingGym
+├── css/styles.css            identité visuelle ON'SPORT (vert & bleu)
 ├── js/
 │   ├── supabaseClient.js     configuration Supabase (à renseigner)
 │   ├── guard.js               vérification de session + rôle
 │   ├── admin.js                logique complète du back-office
 │   └── coach.js                logique de saisie des présences
-└── assets/logo-inline.js      logo SVG (couronne) réutilisable
+└── assets/logo-inline.js      logo SVG ON'SPORT réutilisable
 ```
 
 ## 6. Pistes d'évolution (non incluses)
 
-- Gestion du lien membre ↔ tuteur depuis l'interface (actuellement en base
-  uniquement, via `member_guardians`)
 - Génération de reçus de paiement en PDF
 - Export CSV des présences et paiements
 - Notifications par e-mail (rappels de cotisation, confirmation d'inscription)

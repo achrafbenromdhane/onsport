@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KingGym — Administration</title>
+<title>ON'SPORT — Administration</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
@@ -19,8 +19,6 @@
         <button class="nav-item active" data-section="dashboard">Tableau de bord</button>
         <button class="nav-item" data-section="schedules">Plannings</button>
         <button class="nav-item" data-section="sports">Sports</button>
-        <button class="nav-item" data-section="members">Membres</button>
-        <button class="nav-item" data-section="guardians">Tuteurs</button>
         <button class="nav-item" data-section="memberships">Inscriptions</button>
         <button class="nav-item" data-section="payments">Paiements</button>
         <button class="nav-item" data-section="coaches">Coachs</button>
@@ -83,41 +81,17 @@
       </div>
     </section>
 
-    <!-- MEMBERS -->
-    <section class="section" id="sec-members">
-      <div class="card">
-        <div class="card-header">
-          <h3>Membres</h3>
-          <button class="btn btn-primary btn-sm" id="btn-add-member">+ Nouveau membre</button>
-        </div>
-        <div class="toolbar">
-          <input type="text" id="search-members" placeholder="Rechercher un membre...">
-        </div>
-        <table><thead><tr><th>N°</th><th>Nom</th><th>Naissance</th><th>Genre</th><th>École</th><th>Statut</th><th></th></tr></thead>
-        <tbody id="tbl-members"></tbody></table>
-      </div>
-    </section>
-
-    <!-- GUARDIANS -->
-    <section class="section" id="sec-guardians">
-      <div class="card">
-        <div class="card-header">
-          <h3>Tuteurs / Parents</h3>
-          <button class="btn btn-primary btn-sm" id="btn-add-guardian">+ Nouveau tuteur</button>
-        </div>
-        <table><thead><tr><th>Nom</th><th>Téléphone</th><th>E-mail</th><th></th></tr></thead>
-        <tbody id="tbl-guardians"></tbody></table>
-      </div>
-    </section>
-
-    <!-- MEMBERSHIPS / INSCRIPTIONS -->
+    <!-- MEMBERSHIPS / INSCRIPTIONS (membre + parent/tuteur + sport(s), tout dans le même écran) -->
     <section class="section" id="sec-memberships">
       <div class="card">
         <div class="card-header">
           <h3>Inscriptions</h3>
           <button class="btn btn-primary btn-sm" id="btn-add-membership">+ Nouvelle inscription</button>
         </div>
-        <table><thead><tr><th>Membre</th><th>Sport</th><th>Créneau</th><th>Début</th><th>Statut</th><th>Cotisation</th><th></th></tr></thead>
+        <div class="toolbar">
+          <input type="text" id="search-members" placeholder="Rechercher un membre ou un parent...">
+        </div>
+        <table><thead><tr><th>N°</th><th>Membre</th><th>Naissance</th><th>Parent / Tuteur</th><th>Téléphone</th><th>Sport(s)</th><th>Statut</th><th></th></tr></thead>
         <tbody id="tbl-memberships"></tbody></table>
       </div>
     </section>

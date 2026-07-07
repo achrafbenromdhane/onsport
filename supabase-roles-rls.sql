@@ -1,5 +1,5 @@
 -- =====================================================================
--- KingGym — Sécurité par rôle (admin / coach)
+-- ON'SPORT — Sécurité par rôle (admin / coach)
 -- =====================================================================
 -- À exécuter APRÈS le schéma d'origine et le script de corrections.
 -- Ce script remplace les politiques RLS génériques de la section 6
@@ -250,7 +250,7 @@ CREATE TRIGGER on_auth_user_created
 -- 13. IMPORTANT — Créer votre premier compte admin
 -- =====================================================================
 -- 1) Créez un utilisateur depuis Supabase Dashboard > Authentication > Users
---    > Add user (ou laissez-le s'inscrire depuis la page KingGym).
+--    > Add user (ou laissez-le s'inscrire depuis la page ON'SPORT).
 -- 2) Récupérez son UUID puis exécutez :
 --
 --    UPDATE public.app_users
