@@ -70,6 +70,7 @@ function wireAddButtons() {
   document.getElementById('btn-add-schedule').addEventListener('click', () => openScheduleForm());
   document.getElementById('btn-add-membership').addEventListener('click', () => openMembershipForm());
   document.getElementById('btn-add-payment').addEventListener('click', () => openPaymentForm());
+  document.getElementById('btn-add-coach').addEventListener('click', () => openCoachForm());
   document.getElementById('btn-add-assignment').addEventListener('click', () => openAssignmentForm());
 }
 
@@ -115,7 +116,7 @@ function esc(s) {
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; }
 function fmtTime(t) { return t ? t.slice(0, 5) : '—'; }
-function fmtMoney(n) { return n === null || n === undefined ? '—' : Number(n).toFixed(2) + ' DA'; }
+function fmtMoney(n) { return n === null || n === undefined ? '—' : Number(n).toFixed(2) + ' TND'; }
 function pill(status) { return `<span class="pill pill-${status}">${esc(status)}</span>`; }
 
 // =====================================================================
@@ -129,11 +130,6 @@ async function loadDashboard() {
     supabase.from('payments').select('amount, payment_date, payment_status, payment_type, membership_id, memberships(members(first_name,last_name))').order('payment_date', { ascending: false }).limit(8),
   ]);
 
-  const today = new Date().toISOString().slice(0, 7);
-  const monthRevenue = (payments || [])
-    .filter(p => p.payment_status === 'paid' && (p.payment_date || '').slice(0, 7) === today)
-    .reduce((sum, p) => sum + Number(p.amount), 0);
-
   const { count: todayAttendance } = await supabase
     .from('attendance')
     .select('*', { count: 'exact', head: true })
@@ -142,7 +138,6 @@ async function loadDashboard() {
   document.getElementById('stat-grid').innerHTML = `
     <div class="stat-card"><div class="stat-label">Membres actifs</div><div class="stat-value">${activeMembers ?? 0}</div></div>
     <div class="stat-card"><div class="stat-label">Inscriptions actives</div><div class="stat-value">${activeMemberships ?? 0}</div></div>
-    <div class="stat-card"><div class="stat-label">Revenus du mois</div><div class="stat-value">${monthRevenue.toFixed(0)} DA</div></div>
     <div class="stat-card"><div class="stat-label">Présences aujourd'hui</div><div class="stat-value">${todayAttendance ?? 0}</div></div>
   `;
 
@@ -399,8 +394,8 @@ function openMembershipForm(row = null) {
         <div class="sport-pick-body">
           <div class="field"><label>Créneau (optionnel)</label><select name="sport_${sport.sport_id}_schedule">${scheduleOpts}</select></div>
           <div class="field-row">
-            <div class="field"><label>Frais d'inscription (DA)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_reg" value="${existing?.registration_fee ?? 0}"></div>
-            <div class="field"><label>Cotisation mensuelle (DA)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_monthly" value="${existing?.monthly_fee ?? 0}"></div>
+            <div class="field"><label>Frais d'inscription (TND)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_reg" value="${existing?.registration_fee ?? 0}"></div>
+            <div class="field"><label>Cotisation mensuelle (TND)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_monthly" value="${existing?.monthly_fee ?? 0}"></div>
           </div>
         </div>
       </div>`;
@@ -596,7 +591,7 @@ function openPaymentForm() {
         <option value="other">Autre</option>
       </select>
     </div>
-    <div class="field"><label>Montant (DA)</label><input type="number" step="0.01" name="amount" required></div>
+    <div class="field"><label>Montant (TND)</label><input type="number" step="0.01" name="amount" required></div>
     <div class="field"><label>Date de paiement</label><input type="date" name="payment_date" value="${new Date().toISOString().slice(0,10)}"></div>
     <div class="field"><label>Mois concerné (le cas échéant)</label><input type="month" name="period_month"></div>
     <div class="field"><label>Méthode</label>
@@ -636,6 +631,7 @@ function openPaymentForm() {
 // =====================================================================
 
 let COACHES_CACHE = [];
+let ELIGIBLE_COACH_USERS_CACHE = [];
 
 async function loadCoachesAndAssignments() {
   const { data: coaches, error } = await supabase.from('coaches').select('*, app_users(first_name,last_name)');
@@ -650,6 +646,11 @@ async function loadCoachesAndAssignments() {
       <td><button class="btn btn-danger btn-sm" data-del="${c.coach_id}">Suppr. fiche</button></td>
     </tr>`).join('') || `<tr><td colspan="4" class="empty-state">Aucune fiche coach. Activez d'abord un compte "coach" dans Utilisateurs.</td></tr>`;
   document.querySelectorAll('#tbl-coaches [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('coaches', 'coach_id', b.dataset.del, loadCoachesAndAssignments)));
+
+  // Comptes actifs avec un rôle coach/assistant_coach qui n'ont pas encore de fiche coach.
+  const { data: users } = await supabase.from('app_users').select('*').in('role', ['coach', 'assistant_coach']).eq('is_active', true);
+  const existingUserIds = new Set(COACHES_CACHE.map(c => c.user_id));
+  ELIGIBLE_COACH_USERS_CACHE = (users || []).filter(u => !existingUserIds.has(u.user_id));
 
   if (SCHEDULES_CACHE.length === 0) await loadSchedules();
 
@@ -672,6 +673,29 @@ async function loadCoachesAndAssignments() {
     if (error) { alert(error.message); return; }
     await loadCoachesAndAssignments();
   }));
+}
+
+function openCoachForm() {
+  if (ELIGIBLE_COACH_USERS_CACHE.length === 0) {
+    showMsg('Aucun compte disponible : activez d\'abord un compte avec le rôle "coach" dans l\'onglet Utilisateurs (il ne doit pas déjà avoir de fiche coach).', 'info');
+    return;
+  }
+  const userOptions = ELIGIBLE_COACH_USERS_CACHE.map(u => `<option value="${u.user_id}">${esc(u.first_name)} ${esc(u.last_name)}</option>`).join('');
+
+  openModal('Nouvelle fiche coach', `
+    <div class="field"><label>Compte utilisateur</label><select name="user_id" required>${userOptions}</select></div>
+    <div class="field"><label>Spécialité</label><input name="specialty"></div>
+    <div class="field"><label>Date d'embauche</label><input type="date" name="hire_date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="field"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+  `, async (fd) => {
+    const payload = {
+      user_id: fd.get('user_id'), specialty: fd.get('specialty') || null,
+      hire_date: fd.get('hire_date') || null, notes: fd.get('notes') || null,
+    };
+    const { error } = await supabase.from('coaches').insert(payload);
+    if (error) throw error;
+    await loadCoachesAndAssignments();
+  });
 }
 
 function openAssignmentForm() {
