@@ -10,8 +10,8 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-export const SUPABASE_URL = 'https://VOTRE-PROJET.supabase.co';
-export const SUPABASE_ANON_KEY = 'VOTRE_CLE_ANON_PUBLIQUE';
+export const SUPABASE_URL = 'https://icgtxvwpjpmtfoqumizy.supabase.co';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljZ3R4dndwanBtdGZvcXVtaXp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDkzNDEsImV4cCI6MjA5OTAyNTM0MX0.NPXcKDmO4UzkfKkieuNPTqG9As2hI5KAxOcirGvTxBc';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
