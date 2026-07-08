@@ -101,7 +101,7 @@ function openModal(title, formHtml, onSubmit) {
   document.getElementById('modal-title').textContent = title;
   const form = document.getElementById('modal-form');
   form.innerHTML = formHtml + `
-    <div class="modal-actions">
+    <div class="kg-modal-actions">
       <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
       <button type="submit" class="btn btn-primary">Enregistrer</button>
     </div>`;
