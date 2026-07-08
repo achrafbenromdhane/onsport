@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient.js';
+import { supabase, createAuxClient } from './supabaseClient.js';
 import { requireRole, signOutAndRedirect } from './guard.js';
 import { renderLogo } from '../assets/logo-inline.js';
 
@@ -16,13 +16,26 @@ async function init() {
   PROFILE = result.profile;
 
   renderLogo(document.getElementById('logo-slot'), { size: 30 });
+  renderLogo(document.getElementById('logo-slot-mobile'), { size: 26 });
+  renderLogo(document.getElementById('logo-slot-offcanvas'), { size: 26 });
   document.getElementById('who-name').textContent = `${PROFILE.first_name} ${PROFILE.last_name}`;
   document.getElementById('who-role').textContent = 'Administrateur';
+  document.getElementById('who-name-mobile').textContent = `${PROFILE.first_name} ${PROFILE.last_name}`;
+  document.getElementById('who-role-mobile').textContent = 'Administrateur';
 
   document.getElementById('btn-logout').addEventListener('click', signOutAndRedirect);
+  document.getElementById('btn-logout-mobile').addEventListener('click', signOutAndRedirect);
 
   document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => switchSection(btn.dataset.section, btn));
+    btn.addEventListener('click', () => {
+      switchSection(btn.dataset.section);
+      // Ferme le menu mobile (offcanvas) après sélection.
+      const offcanvasEl = document.getElementById('navOffcanvas');
+      if (offcanvasEl && window.bootstrap) {
+        const instance = window.bootstrap.Offcanvas.getInstance(offcanvasEl) || new window.bootstrap.Offcanvas(offcanvasEl);
+        instance.hide();
+      }
+    });
   });
 
   wireAddButtons();
@@ -46,9 +59,8 @@ const SECTION_TITLES = {
 
 const loadedSections = new Set();
 
-async function switchSection(name, btn) {
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+async function switchSection(name) {
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.section === name));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(`sec-${name}`).classList.add('active');
   document.getElementById('section-title').textContent = SECTION_TITLES[name];
@@ -71,6 +83,7 @@ function wireAddButtons() {
   document.getElementById('btn-add-membership').addEventListener('click', () => openMembershipForm());
   document.getElementById('btn-add-payment').addEventListener('click', () => openPaymentForm());
   document.getElementById('btn-add-coach').addEventListener('click', () => openCoachForm());
+  document.getElementById('btn-create-coach-account').addEventListener('click', () => openCreateCoachAccountForm());
   document.getElementById('btn-add-assignment').addEventListener('click', () => openAssignmentForm());
 }
 
@@ -224,28 +237,44 @@ async function loadSchedules() {
 }
 
 function renderWeekGrid() {
-  const hours = [];
-  for (let h = 7; h <= 21; h++) hours.push(h);
+  const startHour = 7, endHour = 22; // fenêtre affichée : 7h00–22h00
+  const pxPerMinute = 1;
+  const totalMinutes = (endHour - startHour) * 60;
+  const order = [1, 2, 3, 4, 5, 6, 0]; // Lundi..Dimanche
 
-  let html = `<div class="wg-head" style="background:transparent;border:none;"></div>`;
-  DAYS.slice(1).concat(DAYS[0]).forEach(d => { html += `<div class="wg-head">${d}</div>`; });
+  const headerHtml = `<div class="wg-corner"></div>` + order.map(dow => `<div class="wg-head">${DAYS[dow]}</div>`).join('');
 
-  hours.forEach(h => {
-    html += `<div class="wg-time">${String(h).padStart(2, '0')}h</div>`;
-    // Lundi(1)..Samedi(6),Dimanche(0)
-    const order = [1, 2, 3, 4, 5, 6, 0];
-    order.forEach(dow => {
-      const events = SCHEDULES_CACHE.filter(s => s.day_of_week === dow && parseInt(s.start_time.slice(0, 2), 10) === h);
-      html += `<div class="wg-cell">` + events.map(ev => `
-        <div class="wg-event" data-edit="${ev.schedule_id}">
-          <div>${esc(ev.name)}</div>
+  let hourLabelsHtml = '';
+  for (let h = startHour; h <= endHour; h++) {
+    hourLabelsHtml += `<div class="wg-time" style="top:${(h - startHour) * 60 * pxPerMinute}px;">${String(h).padStart(2, '0')}h</div>`;
+  }
+
+  const dayColsHtml = order.map(dow => {
+    const events = SCHEDULES_CACHE.filter(s => s.day_of_week === dow);
+    const eventsHtml = events.map(ev => {
+      const [sh, sm] = ev.start_time.split(':').map(Number);
+      const [eh, em] = ev.end_time.split(':').map(Number);
+      const startMin = Math.max(0, (sh - startHour) * 60 + sm);
+      const endMin = Math.min(totalMinutes, (eh - startHour) * 60 + em);
+      const top = startMin * pxPerMinute;
+      const height = Math.max(18, (endMin - startMin) * pxPerMinute);
+      return `
+        <div class="wg-event" style="top:${top}px;height:${height}px;" data-edit="${ev.schedule_id}">
+          <div class="wg-event-name">${esc(ev.name)}</div>
           <div class="wg-t">${fmtTime(ev.start_time)}–${fmtTime(ev.end_time)}</div>
-        </div>`).join('') + `</div>`;
-    });
-  });
+        </div>`;
+    }).join('');
+    return `<div class="wg-day-col">${eventsHtml}</div>`;
+  }).join('');
 
   const grid = document.getElementById('week-grid');
-  grid.innerHTML = html;
+  grid.innerHTML = `
+    <div class="wg-header">${headerHtml}</div>
+    <div class="wg-body" style="height:${totalMinutes * pxPerMinute}px;">
+      <div class="wg-time-axis">${hourLabelsHtml}</div>
+      ${dayColsHtml}
+    </div>`;
+
   grid.querySelectorAll('[data-edit]').forEach(el => el.addEventListener('click', () => openScheduleForm(SCHEDULES_CACHE.find(s => s.schedule_id === el.dataset.edit))));
 }
 
@@ -306,7 +335,7 @@ async function loadMemberships() {
     .from('members')
     .select(`*,
       member_guardians(relationship, is_primary_contact, guardians(*)),
-      memberships(*, sports(name), training_schedules(name))
+      memberships(*, sports(name), training_schedules(name), membership_schedules(schedule_id))
     `)
     .order('created_at', { ascending: false });
   if (error) { showMsg(error.message, 'error'); return; }
@@ -382,9 +411,14 @@ function openMembershipForm(row = null) {
   const sportsHtml = SPORTS_CACHE.filter(s => s.is_active !== false || (row && (row.memberships || []).some(ms => ms.sport_id === s.sport_id))).map(sport => {
     const existing = row ? (row.memberships || []).find(ms => ms.sport_id === sport.sport_id) : null;
     const checked = existing && existing.membership_status !== 'cancelled';
-    const scheduleOpts = `<option value="">—</option>` + SCHEDULES_CACHE
-      .filter(sc => sc.sport_id === sport.sport_id)
-      .map(sc => `<option value="${sc.schedule_id}" ${existing?.schedule_id === sc.schedule_id ? 'selected' : ''}>${esc(sc.name)} (${DAYS[sc.day_of_week]} ${fmtTime(sc.start_time)})</option>`).join('');
+    const selectedScheduleIds = new Set((existing?.membership_schedules || []).map(x => x.schedule_id));
+    const schedulesForSport = SCHEDULES_CACHE.filter(sc => sc.sport_id === sport.sport_id);
+    const scheduleCheckboxes = schedulesForSport.map(sc => `
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin-bottom:6px;">
+        <input type="checkbox" name="sport_${sport.sport_id}_sched_${sc.schedule_id}" ${selectedScheduleIds.has(sc.schedule_id) ? 'checked' : ''}>
+        ${esc(sc.name)} (${DAYS[sc.day_of_week]} ${fmtTime(sc.start_time)}–${fmtTime(sc.end_time)})
+      </label>`).join('') || `<p class="field-hint" style="margin:0 0 8px 0;">Aucun créneau créé pour ce sport pour l'instant.</p>`;
+
     return `
       <div class="sport-pick ${checked ? 'checked' : ''}" data-sport="${sport.sport_id}">
         <label class="sport-pick-head">
@@ -392,7 +426,10 @@ function openMembershipForm(row = null) {
           ${esc(sport.name)}
         </label>
         <div class="sport-pick-body">
-          <div class="field"><label>Créneau (optionnel)</label><select name="sport_${sport.sport_id}_schedule">${scheduleOpts}</select></div>
+          <div class="field">
+            <label>Créneau(x) — ne rien cocher = inscrit à TOUS les créneaux de ce sport</label>
+            ${scheduleCheckboxes}
+          </div>
           <div class="field-row">
             <div class="field"><label>Frais d'inscription (TND)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_reg" value="${existing?.registration_fee ?? 0}"></div>
             <div class="field"><label>Cotisation mensuelle (TND)</label><input type="number" step="0.01" min="0" name="sport_${sport.sport_id}_monthly" value="${existing?.monthly_fee ?? 0}"></div>
@@ -497,29 +534,43 @@ function openMembershipForm(row = null) {
     }, { onConflict: 'member_id,guardian_id' });
     if (linkErr) throw linkErr;
 
-    // --- 4. Inscriptions sport (multi-sport) ---
+    // --- 4. Inscriptions sport (multi-sport, multi-créneaux) ---
     const affiliation_date = fd.get('affiliation_date') || new Date().toISOString().slice(0, 10);
     for (const sport of SPORTS_CACHE) {
       const isChecked = fd.get(`sport_${sport.sport_id}_on`) === 'on';
       const existing = row ? (row.memberships || []).find(ms => ms.sport_id === sport.sport_id) : null;
-      const scheduleId = fd.get(`sport_${sport.sport_id}_schedule`) || null;
       const regFee = Number(fd.get(`sport_${sport.sport_id}_reg`) || 0);
       const monthlyFee = Number(fd.get(`sport_${sport.sport_id}_monthly`) || 0);
 
       if (isChecked) {
+        let membershipId;
         if (existing) {
           const { error } = await supabase.from('memberships').update({
-            schedule_id: scheduleId, registration_fee: regFee, monthly_fee: monthlyFee,
+            schedule_id: null, registration_fee: regFee, monthly_fee: monthlyFee,
             membership_status: existing.membership_status === 'cancelled' ? 'active' : existing.membership_status,
           }).eq('membership_id', existing.membership_id);
           if (error) throw error;
+          membershipId = existing.membership_id;
         } else {
-          const { error } = await supabase.from('memberships').insert({
-            member_id: memberId, sport_id: sport.sport_id, schedule_id: scheduleId,
+          const { data: newMs, error } = await supabase.from('memberships').insert({
+            member_id: memberId, sport_id: sport.sport_id, schedule_id: null,
             affiliation_date, start_date: affiliation_date,
             registration_fee: regFee, monthly_fee: monthlyFee, membership_status: 'active',
-          });
+          }).select().single();
           if (error) throw error;
+          membershipId = newMs.membership_id;
+        }
+
+        // Créneaux choisis pour ce sport (vide = tous les créneaux du sport).
+        const chosenScheduleIds = SCHEDULES_CACHE
+          .filter(sc => sc.sport_id === sport.sport_id && fd.get(`sport_${sport.sport_id}_sched_${sc.schedule_id}`) === 'on')
+          .map(sc => sc.schedule_id);
+        const { error: delErr } = await supabase.from('membership_schedules').delete().eq('membership_id', membershipId);
+        if (delErr) throw delErr;
+        if (chosenScheduleIds.length > 0) {
+          const { error: insErr } = await supabase.from('membership_schedules')
+            .insert(chosenScheduleIds.map(schedule_id => ({ membership_id: membershipId, schedule_id })));
+          if (insErr) throw insErr;
         }
       } else if (existing && existing.membership_status !== 'cancelled') {
         // Sport décoché : on annule l'inscription plutôt que de la supprimer,
@@ -613,10 +664,27 @@ function openPaymentForm() {
     <div class="field"><label>N° de reçu</label><input name="receipt_number"></div>
   `, async (fd) => {
     const period = fd.get('period_month');
+    const paymentType = fd.get('payment_type');
+    const membershipId = fd.get('membership_id');
+    // Un joueur peut payer plusieurs fois (inscription, équipement, plusieurs sports...)
+    // mais une seule cotisation mensuelle par sport et par mois.
+    const periodMonth = period ? period + '-01' : (paymentType === 'monthly_fee' ? new Date().toISOString().slice(0, 7) + '-01' : null);
+    if (paymentType === 'monthly_fee' && periodMonth) {
+      const { data: dupes, error: dupErr } = await supabase.from('payments')
+        .select('payment_id')
+        .eq('membership_id', membershipId)
+        .eq('payment_type', 'monthly_fee')
+        .eq('period_month', periodMonth)
+        .in('payment_status', ['paid', 'pending']);
+      if (dupErr) throw dupErr;
+      if (dupes && dupes.length > 0) {
+        throw new Error("Une cotisation mensuelle pour ce sport a déjà été enregistrée pour ce mois. Un joueur peut payer plusieurs sports, mais une seule cotisation mensuelle par sport et par mois.");
+      }
+    }
     const payload = {
-      membership_id: fd.get('membership_id'), payment_type: fd.get('payment_type'), amount: Number(fd.get('amount')),
+      membership_id: membershipId, payment_type: paymentType, amount: Number(fd.get('amount')),
       payment_date: fd.get('payment_date') || new Date().toISOString().slice(0,10),
-      period_month: period ? period + '-01' : null,
+      period_month: periodMonth,
       payment_method: fd.get('payment_method'), payment_status: fd.get('payment_status'),
       receipt_number: fd.get('receipt_number') || null,
     };
@@ -674,6 +742,61 @@ async function loadCoachesAndAssignments() {
     if (error) { alert(error.message); return; }
     await loadCoachesAndAssignments();
   }));
+}
+
+function openCreateCoachAccountForm() {
+  openModal('Créer un coach', `
+    <div class="field-group">
+      <div class="field-group-title">Compte de connexion</div>
+      <div class="field-row">
+        <div class="field"><label>Prénom</label><input name="first_name" required></div>
+        <div class="field"><label>Nom</label><input name="last_name" required></div>
+      </div>
+      <div class="field"><label>Téléphone</label><input type="tel" name="phone"></div>
+      <div class="field"><label>E-mail</label><input type="email" name="email" required></div>
+      <div class="field"><label>Mot de passe temporaire</label><input type="text" name="password" required minlength="6"></div>
+      <div class="field-hint">Communiquez ce mot de passe au coach ; il pourra le changer ensuite.</div>
+    </div>
+    <div class="field-group">
+      <div class="field-group-title">Fiche coach</div>
+      <div class="field"><label>Spécialité</label><input name="specialty"></div>
+      <div class="field"><label>Date d'embauche</label><input type="date" name="hire_date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+    </div>
+  `, async (fd) => {
+    const first_name = fd.get('first_name').trim();
+    const last_name = fd.get('last_name').trim();
+    const phone = fd.get('phone')?.trim() || null;
+    const email = fd.get('email').trim();
+    const password = fd.get('password');
+
+    // 1. Création du compte via un client Supabase isolé (ne touche pas la session admin).
+    const aux = createAuxClient();
+    const { data: signUpData, error: signUpError } = await aux.auth.signUp({
+      email, password,
+      options: { data: { first_name, last_name, phone, role: 'coach' } },
+    });
+    if (signUpError) throw signUpError;
+    const newUserId = signUpData?.user?.id;
+    if (!newUserId) throw new Error("Le compte a été créé mais son identifiant n'a pas pu être récupéré. Vérifiez dans Supabase > Authentication > Users.");
+
+    // 2. Le trigger handle_new_user() vient de créer la fiche app_users avec is_active=false :
+    //    on l'active immédiatement puisque c'est l'admin qui crée le compte.
+    const { error: activateError } = await supabase.from('app_users')
+      .update({ is_active: true, role: 'coach', first_name, last_name, phone })
+      .eq('user_id', newUserId);
+    if (activateError) throw activateError;
+
+    // 3. Fiche coach (spécialité, embauche).
+    const { error: coachError } = await supabase.from('coaches').insert({
+      user_id: newUserId, specialty: fd.get('specialty') || null,
+      hire_date: fd.get('hire_date') || null, notes: fd.get('notes') || null,
+    });
+    if (coachError) throw coachError;
+
+    await loadCoachesAndAssignments();
+    showMsg(`Compte coach créé et activé pour ${first_name} ${last_name}. Communiquez-lui son e-mail et son mot de passe.`, 'success');
+  });
 }
 
 function openCoachForm() {

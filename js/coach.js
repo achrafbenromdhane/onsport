@@ -56,7 +56,7 @@ async function init() {
 async function loadMySchedules() {
   const { data, error } = await supabase
     .from('schedule_coaches')
-    .select('coach_role, training_schedules(schedule_id, name, day_of_week, start_time, end_time, location, sports(name))')
+    .select('coach_role, training_schedules(schedule_id, sport_id, name, day_of_week, start_time, end_time, location, sports(name))')
     .eq('coach_id', COACH_ID)
     .eq('is_active', true);
 
@@ -97,14 +97,35 @@ async function loadRoster(schedule) {
   document.getElementById('attendance-title').textContent = `${schedule.name} — ${new Date(date).toLocaleDateString('fr-FR')}`;
   document.getElementById('attendance-list').innerHTML = `<div class="empty-state">Chargement…</div>`;
 
-  const { data: memberships, error } = await supabase
+  // Un membre est éligible à ce créneau si :
+  //  - il est inscrit à un ou plusieurs créneaux précis incluant celui-ci, OU
+  //  - il n'a choisi AUCUN créneau particulier pour ce sport (= tous les créneaux du sport).
+  const { data: candidates, error } = await supabase
     .from('memberships')
     .select('membership_id, members(member_id, first_name, last_name, birth_date)')
-    .eq('schedule_id', schedule.schedule_id)
+    .eq('sport_id', schedule.sport_id)
     .eq('membership_status', 'active');
 
   if (error) { showMsg(error.message, 'error'); return; }
-  ROSTER = memberships || [];
+
+  const candidateIds = (candidates || []).map(c => c.membership_id);
+  let restricted = {}; // membership_id -> Set(schedule_id) choisis explicitement (n'importe quel créneau du sport)
+  if (candidateIds.length > 0) {
+    const { data: msRows } = await supabase
+      .from('membership_schedules')
+      .select('membership_id, schedule_id')
+      .in('membership_id', candidateIds);
+    (msRows || []).forEach(r => {
+      if (!restricted[r.membership_id]) restricted[r.membership_id] = new Set();
+      restricted[r.membership_id].add(r.schedule_id);
+    });
+  }
+
+  ROSTER = (candidates || []).filter(c => {
+    const chosen = restricted[c.membership_id];
+    if (!chosen) return true; // aucune restriction -> tous les créneaux du sport
+    return chosen.has(schedule.schedule_id);
+  });
 
   const { data: existing } = await supabase
     .from('attendance')
