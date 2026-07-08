@@ -335,7 +335,7 @@ async function loadMemberships() {
     .from('members')
     .select(`*,
       member_guardians(relationship, is_primary_contact, guardians(*)),
-      memberships(*, sports(name), training_schedules(name), membership_schedules(schedule_id))
+      memberships(*, sports(name), membership_schedules(schedule_id))
     `)
     .order('created_at', { ascending: false });
   if (error) { showMsg(error.message, 'error'); return; }
