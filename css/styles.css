@@ -431,18 +431,18 @@ tbody tr:hover { background: var(--surface-2); }
   font-size: 0.85rem;
 }
 
-.modal-backdrop {
+.kg-modal-backdrop {
   position: fixed; inset: 0;
   background: rgba(16,24,43,0.45);
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 50;
+  z-index: 1060; /* au-dessus des composants Bootstrap (offcanvas, etc.) */
   padding: 20px;
 }
-.modal-backdrop.open { display: flex; }
+.kg-modal-backdrop.open { display: flex; }
 
-.modal {
+.kg-modal {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -454,24 +454,24 @@ tbody tr:hover { background: var(--surface-2); }
   box-shadow: var(--shadow);
 }
 
-.modal-header {
+.kg-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 18px;
 }
-.modal-header h3 { margin: 0; }
-.modal-close {
+.kg-modal-header h3 { margin: 0; }
+.kg-modal-close {
   background: none; border: none; color: var(--muted);
   font-size: 1.4rem; cursor: pointer; line-height: 1;
 }
 
-.modal-actions {
+.kg-modal-actions {
   display: flex;
   gap: 10px;
   margin-top: 20px;
 }
-.modal-actions .btn { flex: 1; }
+.kg-modal-actions .btn { flex: 1; }
 
 /* ---------- Sport picker (multi-sport inscription) ---------- */
 
