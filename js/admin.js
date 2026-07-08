@@ -644,7 +644,7 @@ function openPaymentForm() {
     </div>
     <div class="field"><label>Montant (TND)</label><input type="number" step="0.01" name="amount" required></div>
     <div class="field"><label>Date de paiement</label><input type="date" name="payment_date" value="${new Date().toISOString().slice(0,10)}"></div>
-    <div class="field"><label>Mois concerné (le cas échéant)</label><input type="month" name="period_month"></div>
+    <div class="field"><label>Mois concerné</label><input type="month" name="period_month" value="${new Date().toISOString().slice(0,7)}"></div>
     <div class="field"><label>Méthode</label>
       <select name="payment_method">
         <option value="cash">Espèces</option>
