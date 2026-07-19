@@ -62,26 +62,55 @@ button, input, select, textarea {
   font-family: var(--font-body);
 }
 
-/* ---------- Logo / signature ---------- */
+/* ---------- Logo / signature (image uploadée par l'utilisateur) ---------- */
 
 .kg-logo {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
-.kg-logo svg { flex-shrink: 0; }
+.kg-logo img { flex-shrink: 0; display: block; }
 
-.kg-logo .kg-wordmark {
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  letter-spacing: 0.04em;
-  font-weight: 700;
+.kg-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.68rem;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+  flex-shrink: 0;
 }
 
-.kg-logo .wm-green { color: var(--green); }
-.kg-logo .wm-blue { color: var(--blue); }
+.kg-logo-edit-btn {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--blue);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kg-logo-edit-btn:hover { border-color: var(--blue); }
+
+.kg-logo-remove-btn {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--crimson);
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.kg-logo-remove-btn:hover { border-color: var(--crimson); }
 
 /* ---------- Layout: auth ---------- */
 
@@ -264,7 +293,6 @@ button, input, select, textarea {
 }
 
 .sidebar .kg-logo { margin-bottom: 32px; padding-left: 4px; }
-.sidebar .kg-logo .kg-wordmark { font-size: 1.15rem; }
 
 .nav-group { margin-bottom: 4px; }
 
@@ -340,6 +368,8 @@ button, input, select, textarea {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .card-header h3 { margin: 0; font-size: 1rem; color: var(--ink); }
@@ -437,7 +467,7 @@ tbody tr:hover { background: var(--surface-2); }
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 1060; /* au-dessus des composants Bootstrap (offcanvas, etc.) */
+  z-index: 1060;
   padding: 20px;
 }
 .kg-modal-backdrop.open { display: flex; }
@@ -569,6 +599,67 @@ tbody tr:hover { background: var(--surface-2); }
   .wg-header .wg-head { font-size: 0.6rem; padding: 6px 2px; }
   .wg-event { font-size: 0.6rem; padding: 2px 3px; }
   .wg-event .wg-t { display: none; }
+}
+
+/* ---------- Dashboard : liste scrollable des adhérents ---------- */
+
+.adherent-legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.dot-paid { background: var(--success); }
+.dot-unpaid { background: var(--crimson); }
+
+.adherent-list {
+  max-height: 440px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+.adherent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+.adherent-row:hover { filter: brightness(0.97); }
+.adherent-row:active { transform: scale(0.997); }
+.adherent-row.paid { background: rgba(29,154,78,0.10); border-color: rgba(29,154,78,0.30); }
+.adherent-row.unpaid { background: rgba(214,41,58,0.08); border-color: rgba(214,41,58,0.28); }
+.adherent-name { font-weight: 600; flex: 1 1 auto; min-width: 120px; }
+.adherent-phone { color: var(--muted); font-size: 0.82rem; flex: 1 1 auto; min-width: 100px; }
+.adherent-status {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.adherent-row.paid .adherent-status { color: var(--success); }
+.adherent-row.unpaid .adherent-status { color: var(--crimson); }
+
+@media (max-width: 600px) {
+  .adherent-row { flex-wrap: wrap; }
+  .adherent-phone { order: 3; flex-basis: 100%; }
 }
 
 /* ---------- Coach attendance ---------- */
