@@ -142,22 +142,17 @@ function pill(status) { return `<span class="pill pill-${status}">${esc(status)}
 
 let DASH_MEMBERS_CACHE = [];
 
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
 async function loadDashboard() {
-  const [{ count: activeMembers }, { count: activeMemberships }] = await Promise.all([
+  const [{ count: activeMembers }] = await Promise.all([
     supabase.from('members').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-    supabase.from('memberships').select('*', { count: 'exact', head: true }).eq('membership_status', 'active'),
   ]);
 
   const { count: todayAttendance } = await supabase
     .from('attendance')
     .select('*', { count: 'exact', head: true })
     .eq('attendance_date', new Date().toISOString().slice(0, 10));
-
-  document.getElementById('stat-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-label">Membres actifs</div><div class="stat-value">${activeMembers ?? 0}</div></div>
-    <div class="stat-card"><div class="stat-label">Inscriptions actives</div><div class="stat-value">${activeMemberships ?? 0}</div></div>
-    <div class="stat-card"><div class="stat-label">Présences aujourd'hui</div><div class="stat-value">${todayAttendance ?? 0}</div></div>
-  `;
 
   const { data: members, error } = await supabase
     .from('members')
@@ -168,8 +163,49 @@ async function loadDashboard() {
     .order('first_name');
 
   if (error) { showMsg(error.message, 'error'); return; }
-
   DASH_MEMBERS_CACHE = members || [];
+
+  const unpaidCount = DASH_MEMBERS_CACHE.filter(m => m.status === 'active' && !isPaidCurrentMonth(m)).length;
+
+  // Planning du jour : créneaux actifs correspondant au jour de la semaine actuel.
+  const todayDow = new Date().getDay();
+  const { data: todaySchedules } = await supabase
+    .from('training_schedules')
+    .select('*, sports(name)')
+    .eq('day_of_week', todayDow)
+    .eq('is_active', true)
+    .order('start_time');
+
+  const todayLabel = capitalize(new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }));
+
+  const scheduleListHtml = (todaySchedules && todaySchedules.length)
+    ? `<div class="today-schedule-list">${todaySchedules.map(s => `
+        <div class="today-schedule-item">
+          <span class="tsi-time">${fmtTime(s.start_time)}–${fmtTime(s.end_time)}</span>
+          <span class="tsi-name">${esc(s.name)}</span>
+          <span class="tsi-sport">${esc(s.sports?.name || '')}</span>
+        </div>`).join('')}</div>`
+    : `<div class="today-schedule-empty">Aucun créneau prévu aujourd'hui.</div>`;
+
+  document.getElementById('stat-grid').innerHTML = `
+    <div class="stat-card stat-card-members">
+      <div class="stat-label">Adhérents actifs</div>
+      <div class="stat-value">${activeMembers ?? 0}</div>
+      <div class="stat-substat ${unpaidCount > 0 ? 'warn' : 'ok'}">
+        <span class="stat-substat-dot"></span>
+        ${unpaidCount} non payé${unpaidCount > 1 ? 's' : ''} ce mois
+      </div>
+    </div>
+    <div class="stat-card"><div class="stat-label">Présences aujourd'hui</div><div class="stat-value">${todayAttendance ?? 0}</div></div>
+    <div class="stat-card stat-card-today">
+      <div class="stat-card-today-header">
+        <div class="stat-label">Planning du jour</div>
+        <div class="stat-today-date">${esc(todayLabel)}</div>
+      </div>
+      ${scheduleListHtml}
+    </div>
+  `;
+
   renderDashAdherents(document.getElementById('search-dashboard-members')?.value.trim().toLowerCase() || '');
 }
 
@@ -213,28 +249,67 @@ function renderDashAdherents(filter) {
     const phone = memberPhone(m) || '—';
     return `
       <div class="adherent-row ${paid ? 'paid' : 'unpaid'}" data-member="${m.member_id}" title="Cliquer pour voir/modifier l'inscription">
-        <div class="adherent-name">${esc(m.first_name)} ${esc(m.last_name)}</div>
-        <div class="adherent-phone">${esc(phone)}</div>
+        <div class="adherent-main">
+          <div class="adherent-name">${esc(m.first_name)} ${esc(m.last_name)}</div>
+          <div class="adherent-phone">${esc(phone)}</div>
+        </div>
         <div class="adherent-status">${paid ? 'Payé ce mois' : 'Non payé'}</div>
+        <div class="adherent-actions">
+          <button type="button" class="btn btn-secondary btn-sm" data-pay="${m.member_id}" title="Enregistrer un paiement">Paiement</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-view="${m.member_id}" title="Voir / modifier la fiche">Fiche</button>
+        </div>
       </div>`;
   }).join('');
 
   list.querySelectorAll('.adherent-row').forEach(row => {
-    row.addEventListener('click', () => goToMemberEdit(row.dataset.member));
+    row.addEventListener('click', () => openMemberEditModal(row.dataset.member));
   });
+  list.querySelectorAll('[data-pay]').forEach(btn => btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMemberPaymentModal(btn.dataset.pay);
+  }));
+  list.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMemberEditModal(btn.dataset.view);
+  }));
 }
 
-// Navigue vers l'onglet Inscriptions et ouvre directement la fiche du membre
-// cliqué (inscription / sport / paiement associés).
-async function goToMemberEdit(memberId) {
-  await switchSection('memberships');
-  if (MEMBERS_CACHE.length === 0) await loadMemberships();
-  const member = MEMBERS_CACHE.find(m => m.member_id === memberId);
-  if (member) {
-    openMembershipForm(member);
-  } else {
+// Ouvre la fiche complète d'un membre (inscription / sport / tuteur) dans la modale,
+// sans quitter le tableau de bord.
+async function openMemberEditModal(memberId) {
+  if (SPORTS_CACHE.length === 0) await loadSports();
+  if (SCHEDULES_CACHE.length === 0) await loadSchedules();
+  if (GUARDIANS_CACHE.length === 0) await loadGuardiansCache();
+
+  const { data: member, error } = await supabase
+    .from('members')
+    .select(`*,
+      member_guardians(relationship, is_primary_contact, guardians(*)),
+      memberships(*, sports(name), membership_schedules(schedule_id))
+    `)
+    .eq('member_id', memberId)
+    .single();
+
+  if (error || !member) {
     showMsg("Impossible de trouver la fiche de ce membre.", 'error');
+    return;
   }
+  openMembershipForm(member);
+}
+
+// Ouvre directement la modale de paiement avec l'inscription du membre présélectionnée,
+// sans quitter le tableau de bord.
+async function openMemberPaymentModal(memberId) {
+  if (MEMBERSHIP_OPTIONS_CACHE.length === 0) {
+    const { data: mships } = await supabase.from('memberships').select('membership_id, member_id, members(first_name,last_name), sports(name)');
+    MEMBERSHIP_OPTIONS_CACHE = mships || [];
+  }
+  const memberMemberships = MEMBERSHIP_OPTIONS_CACHE.filter(ms => ms.member_id === memberId);
+  if (memberMemberships.length === 0) {
+    showMsg("Ce membre n'a aucune inscription sportive à laquelle rattacher un paiement.", 'info');
+    return;
+  }
+  openPaymentForm(memberMemberships, memberMemberships[0].membership_id);
 }
 
 // =====================================================================
@@ -681,7 +756,7 @@ function openMembershipForm(row = null) {
 let MEMBERSHIP_OPTIONS_CACHE = [];
 
 async function loadPayments() {
-  const { data: mships } = await supabase.from('memberships').select('membership_id, members(first_name,last_name), sports(name)');
+  const { data: mships } = await supabase.from('memberships').select('membership_id, member_id, members(first_name,last_name), sports(name)');
   MEMBERSHIP_OPTIONS_CACHE = mships || [];
 
   const { data, error } = await supabase.from('payments')
@@ -703,8 +778,9 @@ async function loadPayments() {
   document.querySelectorAll('#tbl-payments [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('payments', 'payment_id', b.dataset.del, async () => { await loadPayments(); await loadDashboard(); })));
 }
 
-function openPaymentForm() {
-  const mOptions = MEMBERSHIP_OPTIONS_CACHE.map(m => `<option value="${m.membership_id}">${esc(m.members?.first_name)} ${esc(m.members?.last_name)} — ${esc(m.sports?.name)}</option>`).join('');
+function openPaymentForm(membershipOptions = null, preselectMembershipId = null) {
+  const list = membershipOptions || MEMBERSHIP_OPTIONS_CACHE;
+  const mOptions = list.map(m => `<option value="${m.membership_id}" ${m.membership_id === preselectMembershipId ? 'selected' : ''}>${esc(m.members?.first_name)} ${esc(m.members?.last_name)} — ${esc(m.sports?.name)}</option>`).join('');
 
   openModal('Nouveau paiement', `
     <div class="field"><label>Inscription (membre)</label><select name="membership_id" required>${mOptions}</select></div>
