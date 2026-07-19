@@ -15,7 +15,7 @@ async function init() {
   if (!result) return;
   PROFILE = result.profile;
 
-  renderLogo(document.getElementById('logo-slot'), { size: 30 });
+  renderLogo(document.getElementById('logo-slot'), { size: 30, editable: true });
   renderLogo(document.getElementById('logo-slot-mobile'), { size: 26 });
   renderLogo(document.getElementById('logo-slot-offcanvas'), { size: 26 });
   document.getElementById('who-name').textContent = `${PROFILE.first_name} ${PROFILE.last_name}`;
@@ -46,6 +46,10 @@ async function init() {
 
   document.getElementById('search-members').addEventListener('input', (e) => {
     renderInscriptionsTable(e.target.value.trim().toLowerCase());
+  });
+
+  document.getElementById('search-dashboard-members').addEventListener('input', (e) => {
+    renderDashAdherents(e.target.value.trim().toLowerCase());
   });
 
   await loadDashboard();
@@ -133,14 +137,15 @@ function fmtMoney(n) { return n === null || n === undefined ? '—' : Number(n).
 function pill(status) { return `<span class="pill pill-${status}">${esc(status)}</span>`; }
 
 // =====================================================================
-// DASHBOARD
+// DASHBOARD — statistiques + liste des adhérents (statut de cotisation du mois)
 // =====================================================================
 
+let DASH_MEMBERS_CACHE = [];
+
 async function loadDashboard() {
-  const [{ count: activeMembers }, { count: activeMemberships }, { data: payments }] = await Promise.all([
+  const [{ count: activeMembers }, { count: activeMemberships }] = await Promise.all([
     supabase.from('members').select('*', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('memberships').select('*', { count: 'exact', head: true }).eq('membership_status', 'active'),
-    supabase.from('payments').select('amount, payment_date, payment_status, payment_type, membership_id, memberships(members(first_name,last_name))').order('payment_date', { ascending: false }).limit(8),
   ]);
 
   const { count: todayAttendance } = await supabase
@@ -154,14 +159,82 @@ async function loadDashboard() {
     <div class="stat-card"><div class="stat-label">Présences aujourd'hui</div><div class="stat-value">${todayAttendance ?? 0}</div></div>
   `;
 
-  document.getElementById('dash-payments').innerHTML = (payments || []).map(p => `
-    <tr>
-      <td>${fmtDate(p.payment_date)}</td>
-      <td>${esc(p.memberships?.members?.first_name)} ${esc(p.memberships?.members?.last_name)}</td>
-      <td>${esc(p.payment_type)}</td>
-      <td>${fmtMoney(p.amount)}</td>
-      <td>${pill(p.payment_status)}</td>
-    </tr>`).join('') || `<tr><td colspan="5" class="empty-state">Aucun paiement.</td></tr>`;
+  const { data: members, error } = await supabase
+    .from('members')
+    .select(`member_id, first_name, last_name, status,
+      member_guardians(is_primary_contact, guardians(phone)),
+      memberships(membership_status, payments(payment_type, period_month, payment_status))
+    `)
+    .order('first_name');
+
+  if (error) { showMsg(error.message, 'error'); return; }
+
+  DASH_MEMBERS_CACHE = members || [];
+  renderDashAdherents(document.getElementById('search-dashboard-members')?.value.trim().toLowerCase() || '');
+}
+
+function memberPhone(m) {
+  const links = m.member_guardians || [];
+  const primary = links.find(l => l.is_primary_contact) || links[0];
+  return primary?.guardians?.phone || '';
+}
+
+// Vrai si au moins une inscription active du membre a une cotisation mensuelle
+// "payée" dont le mois couvre le mois en cours (aujourd'hui inclus dans la période payée).
+function isPaidCurrentMonth(m) {
+  const currentPeriod = new Date().toISOString().slice(0, 7) + '-01';
+  const memberships = m.memberships || [];
+  return memberships.some(ms =>
+    ms.membership_status !== 'cancelled' &&
+    (ms.payments || []).some(p =>
+      p.payment_type === 'monthly_fee' &&
+      p.period_month === currentPeriod &&
+      p.payment_status === 'paid'
+    )
+  );
+}
+
+function renderDashAdherents(filter) {
+  const list = document.getElementById('dash-adherents');
+  const rows = DASH_MEMBERS_CACHE.filter(m => {
+    if (!filter) return true;
+    const phone = memberPhone(m);
+    const haystack = `${m.first_name} ${m.last_name} ${phone}`.toLowerCase();
+    return haystack.includes(filter);
+  });
+
+  if (rows.length === 0) {
+    list.innerHTML = `<div class="empty-state">Aucun adhérent trouvé.</div>`;
+    return;
+  }
+
+  list.innerHTML = rows.map(m => {
+    const paid = isPaidCurrentMonth(m);
+    const phone = memberPhone(m) || '—';
+    return `
+      <div class="adherent-row ${paid ? 'paid' : 'unpaid'}" data-member="${m.member_id}" title="Cliquer pour voir/modifier l'inscription">
+        <div class="adherent-name">${esc(m.first_name)} ${esc(m.last_name)}</div>
+        <div class="adherent-phone">${esc(phone)}</div>
+        <div class="adherent-status">${paid ? 'Payé ce mois' : 'Non payé'}</div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.adherent-row').forEach(row => {
+    row.addEventListener('click', () => goToMemberEdit(row.dataset.member));
+  });
+}
+
+// Navigue vers l'onglet Inscriptions et ouvre directement la fiche du membre
+// cliqué (inscription / sport / paiement associés).
+async function goToMemberEdit(memberId) {
+  await switchSection('memberships');
+  if (MEMBERS_CACHE.length === 0) await loadMemberships();
+  const member = MEMBERS_CACHE.find(m => m.member_id === memberId);
+  if (member) {
+    openMembershipForm(member);
+  } else {
+    showMsg("Impossible de trouver la fiche de ce membre.", 'error');
+  }
 }
 
 // =====================================================================
@@ -581,6 +654,7 @@ function openMembershipForm(row = null) {
     }
 
     await loadMemberships();
+    await loadDashboard();
     showMsg("Inscription enregistrée.", 'success');
   });
 
@@ -626,7 +700,7 @@ async function loadPayments() {
       <td><button class="btn btn-danger btn-sm" data-del="${p.payment_id}">Suppr.</button></td>
     </tr>`).join('') || `<tr><td colspan="7" class="empty-state">Aucun paiement.</td></tr>`;
 
-  document.querySelectorAll('#tbl-payments [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('payments', 'payment_id', b.dataset.del, loadPayments)));
+  document.querySelectorAll('#tbl-payments [data-del]').forEach(b => b.addEventListener('click', () => deleteRow('payments', 'payment_id', b.dataset.del, async () => { await loadPayments(); await loadDashboard(); })));
 }
 
 function openPaymentForm() {
@@ -691,6 +765,7 @@ function openPaymentForm() {
     const { error } = await supabase.from('payments').insert(payload);
     if (error) throw error;
     await loadPayments();
+    await loadDashboard();
   });
 }
 
