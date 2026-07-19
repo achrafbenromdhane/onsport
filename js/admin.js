@@ -25,6 +25,7 @@ async function init() {
 
   document.getElementById('btn-logout').addEventListener('click', signOutAndRedirect);
   document.getElementById('btn-logout-mobile').addEventListener('click', signOutAndRedirect);
+  document.getElementById('btn-export-csv').addEventListener('click', exportAllDataCsv);
 
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1036,6 +1037,89 @@ async function loadUsers() {
     if (error) { alert(error.message); return; }
     await loadUsers();
   }));
+}
+
+// =====================================================================
+// Export CSV — toutes les tables de la base, un fichier par table
+// =====================================================================
+
+const EXPORT_TABLES = [
+  'members', 'guardians', 'member_guardians', 'sports', 'training_schedules',
+  'memberships', 'membership_schedules', 'payments', 'coaches', 'schedule_coaches',
+  'attendance', 'app_users',
+];
+
+function toCsv(rows) {
+  if (!rows || rows.length === 0) return '';
+  // Union de toutes les colonnes rencontrées (au cas où certaines lignes ont des champs en plus/en moins).
+  const headerSet = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+  const headers = Array.from(headerSet);
+
+  const escapeCell = (val) => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'object') val = JSON.stringify(val);
+    const s = String(val);
+    if (/[",\n;]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push(headers.map(h => escapeCell(row[h])).join(','));
+  }
+  return lines.join('\r\n');
+}
+
+function downloadCsv(filename, csvContent) {
+  // \uFEFF (BOM) pour qu'Excel ouvre correctement les accents en UTF-8.
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+async function exportAllDataCsv() {
+  const btn = document.getElementById('btn-export-csv');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Export en cours...';
+
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  let exportedCount = 0;
+  let delayIndex = 0;
+
+  try {
+    for (const table of EXPORT_TABLES) {
+      const { data, error } = await supabase.from(table).select('*');
+      if (error) {
+        console.error(`Erreur export "${table}" :`, error.message);
+        continue;
+      }
+      if (!data || data.length === 0) continue;
+
+      const csv = toCsv(data);
+      // Léger décalage entre chaque téléchargement pour éviter que le navigateur en bloque certains.
+      setTimeout(() => downloadCsv(`onsport_${table}_${dateStamp}.csv`, csv), delayIndex * 350);
+      delayIndex++;
+      exportedCount++;
+    }
+
+    if (exportedCount === 0) {
+      showMsg("Aucune donnée à exporter.", 'info');
+    } else {
+      showMsg(`Export lancé : ${exportedCount} fichier(s) CSV vont se télécharger (un par table).`, 'success');
+    }
+  } catch (err) {
+    showMsg("Erreur pendant l'export : " + (err.message || err), 'error');
+  } finally {
+    setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, delayIndex * 350 + 400);
+  }
 }
 
 // =====================================================================
