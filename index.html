@@ -33,7 +33,7 @@
         <input type="password" id="login-password" required autocomplete="current-password">
       </div>
       <button type="submit" class="btn btn-primary">Se connecter</button>
-      <p class="hint">Espace réservé aux administrateurs et coachs de ON'SPORT.</p>
+      <p class="hint">Espace réservé aux administrateurs et coachs.</p>
     </form>
 
     <!-- SIGNUP (coach) -->
@@ -70,7 +70,7 @@
 import { supabase } from './js/supabaseClient.js';
 import { renderLogo } from './assets/logo-inline.js';
 
-renderLogo(document.getElementById('logo-slot'), { size: 40 });
+renderLogo(document.getElementById('logo-slot'), { size: 40, editable: true });
 
 const tabLogin = document.getElementById('tab-login');
 const tabSignup = document.getElementById('tab-signup');
